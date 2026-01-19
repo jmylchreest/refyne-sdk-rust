@@ -129,3 +129,95 @@ struct ErrorResponse {
     detail: Option<String>,
     errors: Option<HashMap<String, Vec<String>>>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_api_error_display() {
+        let err = Error::Api {
+            status: 500,
+            message: "Internal server error".into(),
+            detail: Some("Something went wrong".into()),
+        };
+        assert!(err.to_string().contains("500"));
+        assert!(err.to_string().contains("Internal server error"));
+    }
+
+    #[test]
+    fn test_rate_limit_error_display() {
+        let err = Error::RateLimit {
+            retry_after: 30,
+            message: "Too many requests".into(),
+        };
+        assert!(err.to_string().contains("30"));
+        assert!(err.to_string().contains("Rate limited"));
+    }
+
+    #[test]
+    fn test_validation_error_display() {
+        let mut errors = HashMap::new();
+        errors.insert("url".to_string(), vec!["URL is required".to_string()]);
+        let err = Error::Validation {
+            message: "Invalid input".into(),
+            errors,
+        };
+        assert!(err.to_string().contains("Validation error"));
+    }
+
+    #[test]
+    fn test_authentication_error_display() {
+        let err = Error::Authentication("Invalid API key".into());
+        assert!(err.to_string().contains("Authentication failed"));
+        assert!(err.to_string().contains("Invalid API key"));
+    }
+
+    #[test]
+    fn test_forbidden_error_display() {
+        let err = Error::Forbidden("Insufficient permissions".into());
+        assert!(err.to_string().contains("Access forbidden"));
+    }
+
+    #[test]
+    fn test_not_found_error_display() {
+        let err = Error::NotFound("Job not found".into());
+        assert!(err.to_string().contains("Not found"));
+    }
+
+    #[test]
+    fn test_unsupported_api_version_error_display() {
+        let err = Error::UnsupportedApiVersion {
+            api_version: "0.5.0".into(),
+            min_version: "1.0.0".into(),
+            max_known_version: "1.1.0".into(),
+        };
+        assert!(err.to_string().contains("0.5.0"));
+        assert!(err.to_string().contains("1.0.0"));
+    }
+
+    #[test]
+    fn test_config_error_display() {
+        let err = Error::Config("API key is required".into());
+        assert!(err.to_string().contains("Configuration error"));
+        assert!(err.to_string().contains("API key is required"));
+    }
+
+    #[test]
+    fn test_timeout_error_display() {
+        let err = Error::Timeout;
+        assert!(err.to_string().contains("timed out"));
+    }
+
+    #[test]
+    fn test_error_is_debug() {
+        let err = Error::Api {
+            status: 404,
+            message: "Not found".into(),
+            detail: None,
+        };
+        // Ensure Debug is implemented
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("Api"));
+    }
+}

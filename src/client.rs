@@ -156,6 +156,31 @@ impl Client {
         ClientBuilder::new(api_key)
     }
 
+    /// Access job-related operations.
+    pub fn jobs(&self) -> JobsClient<'_> {
+        JobsClient { client: self }
+    }
+
+    /// Access schema-related operations.
+    pub fn schemas(&self) -> SchemasClient<'_> {
+        SchemasClient { client: self }
+    }
+
+    /// Access site-related operations.
+    pub fn sites(&self) -> SitesClient<'_> {
+        SitesClient { client: self }
+    }
+
+    /// Access API key operations.
+    pub fn keys(&self) -> KeysClient<'_> {
+        KeysClient { client: self }
+    }
+
+    /// Access LLM configuration operations.
+    pub fn llm(&self) -> LlmClient<'_> {
+        LlmClient { client: self }
+    }
+
     /// Extract structured data from a single web page.
     pub async fn extract(&self, request: ExtractRequest) -> Result<ExtractResponse> {
         self.post("/api/v1/extract", &request).await
@@ -172,7 +197,7 @@ impl Client {
     }
 
     /// Get usage statistics for the current billing period.
-    pub async fn get_usage(&self) -> Result<UsageResponse> {
+    pub async fn get_usage(&self) -> Result<GetUsageOutputBody> {
         self.get("/api/v1/usage").await
     }
 
@@ -498,5 +523,259 @@ impl Client {
         }
 
         Ok(response)
+    }
+}
+
+// =============================================================================
+// Sub-clients for organized API access
+// =============================================================================
+
+/// Sub-client for job-related operations.
+pub struct JobsClient<'a> {
+    client: &'a Client,
+}
+
+impl<'a> JobsClient<'a> {
+    /// List all jobs.
+    pub async fn list(&self, limit: Option<u32>, offset: Option<u32>) -> Result<JobList> {
+        self.client.list_jobs(limit, offset).await
+    }
+
+    /// Get a job by ID.
+    pub async fn get(&self, id: &str) -> Result<Job> {
+        self.client.get_job(id).await
+    }
+
+    /// Get job results.
+    pub async fn get_results(&self, id: &str, merge: bool) -> Result<JobResults> {
+        self.client.get_job_results(id, merge).await
+    }
+}
+
+/// Sub-client for schema operations.
+pub struct SchemasClient<'a> {
+    client: &'a Client,
+}
+
+impl<'a> SchemasClient<'a> {
+    /// List all schemas.
+    pub async fn list(&self) -> Result<SchemaList> {
+        self.client.list_schemas().await
+    }
+
+    /// Get a schema by ID.
+    pub async fn get(&self, id: &str) -> Result<Schema> {
+        self.client.get_schema(id).await
+    }
+
+    /// Create a new schema.
+    pub async fn create(&self, request: CreateSchemaRequest) -> Result<Schema> {
+        self.client.create_schema(request).await
+    }
+
+    /// Update a schema.
+    pub async fn update(&self, id: &str, request: CreateSchemaRequest) -> Result<Schema> {
+        self.client.update_schema(id, request).await
+    }
+
+    /// Delete a schema.
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        self.client.delete_schema(id).await
+    }
+}
+
+/// Sub-client for site operations.
+pub struct SitesClient<'a> {
+    client: &'a Client,
+}
+
+impl<'a> SitesClient<'a> {
+    /// List all saved sites.
+    pub async fn list(&self) -> Result<SiteList> {
+        self.client.list_sites().await
+    }
+
+    /// Get a site by ID.
+    pub async fn get(&self, id: &str) -> Result<Site> {
+        self.client.get_site(id).await
+    }
+
+    /// Create a new site.
+    pub async fn create(&self, request: CreateSiteRequest) -> Result<Site> {
+        self.client.create_site(request).await
+    }
+
+    /// Update a site.
+    pub async fn update(&self, id: &str, request: CreateSiteRequest) -> Result<Site> {
+        self.client.update_site(id, request).await
+    }
+
+    /// Delete a site.
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        self.client.delete_site(id).await
+    }
+}
+
+/// Sub-client for API key operations.
+pub struct KeysClient<'a> {
+    client: &'a Client,
+}
+
+impl<'a> KeysClient<'a> {
+    /// List all API keys.
+    pub async fn list(&self) -> Result<ApiKeyList> {
+        self.client.list_keys().await
+    }
+
+    /// Create a new API key.
+    pub async fn create(&self, name: &str) -> Result<ApiKeyCreated> {
+        self.client.create_key(name).await
+    }
+
+    /// Revoke an API key.
+    pub async fn revoke(&self, id: &str) -> Result<()> {
+        self.client.revoke_key(id).await
+    }
+}
+
+/// Sub-client for LLM configuration.
+pub struct LlmClient<'a> {
+    client: &'a Client,
+}
+
+impl<'a> LlmClient<'a> {
+    /// List available LLM providers.
+    pub async fn list_providers(&self) -> Result<ProvidersResponse> {
+        self.client.list_providers().await
+    }
+
+    /// List available models for a provider.
+    pub async fn list_models(&self, provider: &str) -> Result<ModelList> {
+        self.client.list_models(provider).await
+    }
+
+    /// List configured LLM keys.
+    pub async fn list_keys(&self) -> Result<LlmKeyList> {
+        self.client.list_llm_keys().await
+    }
+
+    /// Add or update an LLM key.
+    pub async fn upsert_key(&self, request: UpsertLlmKeyRequest) -> Result<LlmKey> {
+        self.client.upsert_llm_key(request).await
+    }
+
+    /// Delete an LLM key.
+    pub async fn delete_key(&self, id: &str) -> Result<()> {
+        self.client.delete_llm_key(id).await
+    }
+
+    /// Get the LLM fallback chain.
+    pub async fn get_chain(&self) -> Result<LlmChain> {
+        self.client.get_llm_chain().await
+    }
+
+    /// Set the LLM fallback chain.
+    pub async fn set_chain(&self, chain: Vec<LlmChainEntry>) -> Result<()> {
+        self.client.set_llm_chain(chain).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_builder_requires_api_key() {
+        let result = ClientBuilder::new("").build();
+        assert!(result.is_err());
+        if let Err(Error::Config(msg)) = result {
+            assert!(msg.contains("API key is required"));
+        } else {
+            panic!("Expected Config error");
+        }
+    }
+
+    #[test]
+    fn test_client_builder_default_values() {
+        let builder = ClientBuilder::new("test-key");
+        assert_eq!(builder.base_url, DEFAULT_BASE_URL);
+        assert_eq!(builder.timeout, Duration::from_secs(DEFAULT_TIMEOUT_SECS));
+        assert_eq!(builder.max_retries, DEFAULT_MAX_RETRIES);
+        assert!(builder.cache_enabled);
+    }
+
+    #[test]
+    fn test_client_builder_custom_base_url() {
+        let result = ClientBuilder::new("test-key")
+            .base_url("https://custom.api.com/")
+            .build();
+        assert!(result.is_ok());
+        let client = result.unwrap();
+        assert_eq!(client.base_url, "https://custom.api.com");
+    }
+
+    #[test]
+    fn test_client_builder_strips_trailing_slash() {
+        let result = ClientBuilder::new("test-key")
+            .base_url("https://api.example.com/")
+            .build();
+        assert!(result.is_ok());
+        let client = result.unwrap();
+        assert!(!client.base_url.ends_with('/'));
+    }
+
+    #[test]
+    fn test_client_builder_custom_timeout() {
+        let builder = ClientBuilder::new("test-key").timeout(Duration::from_secs(60));
+        assert_eq!(builder.timeout, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_client_builder_custom_max_retries() {
+        let builder = ClientBuilder::new("test-key").max_retries(5);
+        assert_eq!(builder.max_retries, 5);
+    }
+
+    #[test]
+    fn test_client_builder_cache_disabled() {
+        let result = ClientBuilder::new("test-key").cache_enabled(false).build();
+        assert!(result.is_ok());
+        let client = result.unwrap();
+        assert!(!client.cache_enabled);
+    }
+
+    #[test]
+    fn test_client_builder_custom_user_agent_suffix() {
+        let result = ClientBuilder::new("test-key")
+            .user_agent_suffix("MyApp/1.0")
+            .build();
+        assert!(result.is_ok());
+        let client = result.unwrap();
+        assert!(client.user_agent.contains("MyApp/1.0"));
+    }
+
+    #[test]
+    fn test_client_builder_static_method() {
+        let result = Client::builder("test-key").build();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_client_has_sub_clients() {
+        let client = Client::builder("test-key").build().unwrap();
+
+        // Just verify sub-clients can be created
+        let _ = client.jobs();
+        let _ = client.schemas();
+        let _ = client.sites();
+        let _ = client.keys();
+        let _ = client.llm();
+    }
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(DEFAULT_BASE_URL, "https://api.refyne.uk");
+        assert_eq!(DEFAULT_TIMEOUT_SECS, 30);
+        assert_eq!(DEFAULT_MAX_RETRIES, 3);
     }
 }

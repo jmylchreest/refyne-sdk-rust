@@ -34,13 +34,12 @@ async fn main() -> Result<(), refyne::Error> {
 
     println!("Extracted data: {:#?}", result.data);
 
-    if let Some(usage) = result.usage {
-        println!(
-            "Tokens used: {} input, {} output",
-            usage.input_tokens, usage.output_tokens
-        );
-        println!("Cost: ${:.6}", usage.cost_usd);
-    }
+    // Usage information is always available
+    println!(
+        "Tokens used: {} input, {} output",
+        result.usage.input_tokens, result.usage.output_tokens
+    );
+    println!("Cost: ${:.6}", result.usage.cost_usd);
 
     Ok(())
 }

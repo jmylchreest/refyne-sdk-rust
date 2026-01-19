@@ -1,6 +1,8 @@
 # Refyne Rust SDK
 
-Official Rust SDK for the [Refyne API](https://docs.refyne.uk) - LLM-powered web extraction.
+Official Rust SDK for the [Refyne API](https://refyne.uk/docs) - LLM-powered web extraction.
+
+**API Endpoint**: `https://api.refyne.uk` | **Documentation**: [refyne.uk/docs](https://refyne.uk/docs)
 
 [![Crates.io](https://img.shields.io/crates/v/refyne.svg)](https://crates.io/crates/refyne)
 [![Documentation](https://docs.rs/refyne/badge.svg)](https://docs.rs/refyne)

@@ -19,10 +19,7 @@ pub fn parse_version(version: &str) -> (u32, u32, u32, Option<&str>) {
     let parts: Vec<&str> = version.split('-').collect();
     let prerelease = parts.get(1).copied();
 
-    let nums: Vec<u32> = parts[0]
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
+    let nums: Vec<u32> = parts[0].split('.').filter_map(|s| s.parse().ok()).collect();
 
     (
         nums.first().copied().unwrap_or(0),

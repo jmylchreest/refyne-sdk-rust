@@ -34,7 +34,9 @@ mod types;
 mod version;
 
 pub use cache::{Cache, CacheEntry, MemoryCache};
-pub use client::{Client, ClientBuilder};
+pub use client::{
+    Client, ClientBuilder, JobsClient, KeysClient, LlmClient, SchemasClient, SitesClient,
+};
 pub use error::{Error, Result};
 pub use types::*;
 pub use version::{

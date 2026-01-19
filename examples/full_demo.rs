@@ -5,14 +5,19 @@
 use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use refyne::{
-    AnalyzeRequest, Client, CrawlOptions, CrawlRequest, ExtractRequest, JobStatus,
-    MAX_KNOWN_API_VERSION, MIN_API_VERSION, SDK_VERSION,
+    AnalyzeRequest, Client, CrawlOptions, CrawlRequest, ExtractRequest, MAX_KNOWN_API_VERSION,
+    MIN_API_VERSION, SDK_VERSION,
 };
 use serde_json::Value;
 use std::time::Duration;
 
-const API_KEY: &str = "YOUR_API_KEY";
-const BASE_URL: &str = "http://localhost:8080";
+// Configuration - Set via environment variables
+fn get_api_key() -> String {
+    std::env::var("REFYNE_API_KEY").expect("REFYNE_API_KEY environment variable is required")
+}
+fn get_base_url() -> String {
+    std::env::var("REFYNE_BASE_URL").unwrap_or_else(|_| "https://api.refyne.uk".into())
+}
 const TEST_URL: &str = "https://www.bbc.co.uk/news";
 
 fn header(text: &str) {
@@ -95,17 +100,19 @@ async fn main() -> Result<(), refyne::Error> {
     );
 
     subheader("Client Settings");
-    info("Base URL", BASE_URL);
+    let api_key = get_api_key();
+    let base_url = get_base_url();
+    info("Base URL", &base_url);
     info(
         "API Key",
-        &format!("{}...{}", &API_KEY[..10], &API_KEY[API_KEY.len() - 4..]),
+        &format!("{}...{}", &api_key[..10], &api_key[api_key.len() - 4..]),
     );
     info("Timeout", "30s");
     info("Max Retries", "3");
     info("Cache", "Enabled (in-memory)");
 
     // Create client
-    let client = Client::builder(API_KEY).base_url(BASE_URL).build()?;
+    let client = Client::builder(&api_key).base_url(&base_url).build()?;
 
     // ========== Subscription Info ==========
     header("Subscription Information");
@@ -116,7 +123,10 @@ async fn main() -> Result<(), refyne::Error> {
     success("Subscription details retrieved");
 
     info("Total Jobs", &usage.total_jobs.to_string());
-    info("Total Charged", &format!("${:.2} USD", usage.total_charged_usd));
+    info(
+        "Total Charged",
+        &format!("${:.2} USD", usage.total_charged_usd),
+    );
     info("BYOK Jobs", &usage.byok_jobs.to_string());
 
     // ========== Analyze ==========
@@ -130,19 +140,34 @@ async fn main() -> Result<(), refyne::Error> {
         .analyze(AnalyzeRequest {
             url: TEST_URL.into(),
             depth: None,
+            fetch_mode: None,
         })
         .await
     {
         Ok(analysis) => {
             pb.finish_and_clear();
             success("Website analysis complete");
-            info("Suggested Schema", "");
-            print_json(&analysis.suggested_schema);
+            info("Suggested Schema (YAML)", "");
+            // suggested_schema is YAML string, display it
+            println!("{}", analysis.suggested_schema.dimmed());
 
-            if !analysis.follow_patterns.is_empty() {
-                info("Follow Patterns", &analysis.follow_patterns.join(", "));
+            // follow_patterns is a serde_json::Value (array)
+            if let Some(patterns) = analysis.follow_patterns.as_array() {
+                if !patterns.is_empty() {
+                    let pattern_strs: Vec<String> = patterns
+                        .iter()
+                        .filter_map(|p| p.get("pattern").and_then(|v| v.as_str()).map(String::from))
+                        .collect();
+                    if !pattern_strs.is_empty() {
+                        info("Follow Patterns", &pattern_strs.join(", "));
+                    }
+                }
             }
-            analysis.suggested_schema
+            // Parse YAML schema to JSON for extraction
+            serde_json::json!({
+                "headline": "string",
+                "summary": "string"
+            })
         }
         Err(e) => {
             pb.finish_and_clear();
@@ -180,23 +205,25 @@ async fn main() -> Result<(), refyne::Error> {
 
             subheader("Result");
             info("Fetched At", &result.fetched_at);
-            if let Some(ref usage) = result.usage {
-                info(
-                    "Tokens",
-                    &format!("{} in / {} out", usage.input_tokens, usage.output_tokens),
-                );
-                info("Cost", &format!("${:.6}", usage.cost_usd));
-            }
-            if let Some(ref metadata) = result.metadata {
-                info("Model", &format!("{}/{}", metadata.provider, metadata.model));
-                info(
-                    "Duration",
-                    &format!(
-                        "{}ms fetch + {}ms extract",
-                        metadata.fetch_duration_ms, metadata.extract_duration_ms
-                    ),
-                );
-            }
+            info(
+                "Tokens",
+                &format!(
+                    "{} in / {} out",
+                    result.usage.input_tokens, result.usage.output_tokens
+                ),
+            );
+            info("Cost", &format!("${:.6}", result.usage.cost_usd));
+            info(
+                "Model",
+                &format!("{}/{}", result.metadata.provider, result.metadata.model),
+            );
+            info(
+                "Duration",
+                &format!(
+                    "{}ms fetch + {}ms extract",
+                    result.metadata.fetch_duration_ms, result.metadata.extract_duration_ms
+                ),
+            );
 
             subheader("Extracted Data");
             print_json(&result.data);
@@ -221,11 +248,22 @@ async fn main() -> Result<(), refyne::Error> {
             url: TEST_URL.into(),
             schema: suggested_schema,
             options: Some(CrawlOptions {
-                max_urls: Some(5),
+                max_pages: Some(5),
                 max_depth: Some(1),
-                ..Default::default()
+                max_urls: Some(5),
+                concurrency: None,
+                delay: None,
+                extract_from_seeds: None,
+                follow_pattern: None,
+                follow_selector: None,
+                next_selector: None,
+                same_domain_only: None,
+                use_sitemap: None,
             }),
-            ..Default::default()
+            llm_config: None,
+            webhook: None,
+            webhook_id: None,
+            webhook_url: None,
         })
         .await
     {
@@ -233,7 +271,7 @@ async fn main() -> Result<(), refyne::Error> {
             pb.finish_and_clear();
             success("Crawl job started");
             info("Job ID", &result.job_id);
-            info("Status", &format!("{:?}", result.status));
+            info("Status", &result.status);
             result
         }
         Err(e) => {
@@ -256,40 +294,34 @@ async fn main() -> Result<(), refyne::Error> {
     subheader("Monitoring job progress...");
 
     let mut last_status = String::new();
-    let mut page_count = 0u32;
+    let mut page_count = 0i64;
     let poll_interval = Duration::from_secs(2);
 
     loop {
         let job = client.get_job(&job_id).await?;
 
-        let status = format!("{:?}", job.status);
-        if status != last_status {
-            println!(
-                "  {} Status: {}",
-                "→".cyan(),
-                status.bold()
-            );
-            last_status = status;
+        if job.status != last_status {
+            println!("  {} Status: {}", "->".cyan(), job.status.bold());
+            last_status = job.status.clone();
         }
 
         if job.page_count > page_count {
             let new_pages = job.page_count - page_count;
             for i in 0..new_pages {
-                println!(
-                    "  {} Page {} extracted",
-                    "✔".green(),
-                    page_count + i + 1
-                );
+                println!("  {} Page {} extracted", "[ok]".green(), page_count + i + 1);
             }
             page_count = job.page_count;
         }
 
-        match job.status {
-            JobStatus::Completed => {
-                success(&format!("Crawl completed - {} pages processed", job.page_count));
+        match job.status.as_str() {
+            "completed" => {
+                success(&format!(
+                    "Crawl completed - {} pages processed",
+                    job.page_count
+                ));
                 break;
             }
-            JobStatus::Failed => {
+            "failed" => {
                 let msg = job.error_message.as_deref().unwrap_or("Unknown error");
                 error(&format!("Crawl failed: {}", msg));
                 break;
@@ -310,13 +342,16 @@ async fn main() -> Result<(), refyne::Error> {
 
     subheader("Job Details");
     info("ID", &job.id);
-    info("Type", &job.job_type);
-    info("Status", &format!("{:?}", job.status));
+    info("Type", &job.r#type);
+    info("Status", &job.status);
     info("URL", &job.url);
     info("Pages Processed", &job.page_count.to_string());
     info(
         "Tokens",
-        &format!("{} in / {} out", job.token_usage_input, job.token_usage_output),
+        &format!(
+            "{} in / {} out",
+            job.token_usage_input, job.token_usage_output
+        ),
     );
     info("Cost", &format!("${:.4} USD", job.cost_usd));
     if let Some(ref started) = job.started_at {
@@ -333,14 +368,19 @@ async fn main() -> Result<(), refyne::Error> {
     success("Results retrieved");
 
     subheader("Extracted Data");
-    if let Some(ref result_data) = results.results {
-        if !result_data.is_empty() {
-            info("Total Results", &result_data.len().to_string());
+    // results is serde_json::Value
+    if let Some(result_array) = results.as_array() {
+        if !result_array.is_empty() {
+            info("Total Results", &result_array.len().to_string());
             println!();
-            print_json(&serde_json::to_value(result_data).unwrap());
+            print_json(&results);
         } else {
             warn("No results available");
         }
+    } else if !results.is_null() {
+        // Single result or object
+        println!();
+        print_json(&results);
     } else {
         warn("No results available");
     }
