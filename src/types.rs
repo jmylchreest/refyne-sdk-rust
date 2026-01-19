@@ -178,7 +178,6 @@ pub enum JobStatus {
 
 /// Job details.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Job {
     /// Job ID.
     pub id: String,
@@ -189,14 +188,16 @@ pub struct Job {
     pub status: JobStatus,
     /// Seed URL.
     pub url: String,
+    /// Number of URLs queued.
+    pub urls_queued: u32,
     /// Number of pages processed.
     pub page_count: u32,
     /// Input tokens used.
     pub token_usage_input: u64,
     /// Output tokens used.
     pub token_usage_output: u64,
-    /// Cost in credits.
-    pub cost_credits: f64,
+    /// Cost in USD.
+    pub cost_usd: f64,
     /// Error message if failed.
     pub error_message: Option<String>,
     /// When the job started.
@@ -372,20 +373,13 @@ pub struct ApiKeyCreated {
 
 /// Usage statistics.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UsageResponse {
-    /// User's tier.
-    pub tier: String,
-    /// Credits used this period.
-    pub credits_used: f64,
-    /// Credit limit.
-    pub credits_limit: f64,
-    /// Credits remaining.
-    pub credits_remaining: f64,
-    /// Period start date.
-    pub period_start: String,
-    /// Period end date.
-    pub period_end: String,
+    /// Total number of jobs.
+    pub total_jobs: u64,
+    /// Total USD charged for usage.
+    pub total_charged_usd: f64,
+    /// Jobs using user's own API keys (not charged).
+    pub byok_jobs: u64,
 }
 
 /// LLM provider key.

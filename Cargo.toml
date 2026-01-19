@@ -23,6 +23,8 @@ tracing = "0.1"
 [dev-dependencies]
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 wiremock = "0.6"
+indicatif = "0.17"
+colored = "2.0"
 
 [features]
 default = []
@@ -30,3 +32,7 @@ default = []
 [[example]]
 name = "basic_extraction"
 path = "examples/basic_extraction.rs"
+
+[[example]]
+name = "full_demo"
+path = "examples/full_demo.rs"
