@@ -1,0 +1,95 @@
+name: Sync OpenAPI
+
+on:
+  repository_dispatch:
+    types: [openapi-updated]
+  workflow_dispatch:
+    inputs:
+      spec_url:
+        description: 'OpenAPI spec URL (leave empty for default)'
+        required: false
+        type: string
+      api_major:
+        description: 'API major version'
+        required: false
+        type: string
+        default: '0'
+      api_minor:
+        description: 'API minor version'
+        required: false
+        type: string
+        default: '0'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate types from OpenAPI
+        env:
+          OPENAPI_SPEC_URL: ${{ github.event.inputs.spec_url || github.event.client_payload.spec_url || 'https://api.refyne.uk/openapi.json' }}
+        run: python3 scripts/generate.py --url "$OPENAPI_SPEC_URL"
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --exit-code src/types.rs || echo "has_changes=true" >> $GITHUB_OUTPUT
+
+      - name: Update version
+        if: steps.git-check.outputs.has_changes == 'true'
+        id: version
+        run: |
+          # Get API major.minor from payload or inputs
+          API_MAJOR="${{ github.event.client_payload.api_major || github.event.inputs.api_major || '0' }}"
+          API_MINOR="${{ github.event.client_payload.api_minor || github.event.inputs.api_minor || '0' }}"
+
+          # Get current version from Cargo.toml
+          CURRENT=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          CURRENT_MAJOR=$(echo $CURRENT | cut -d. -f1)
+          CURRENT_MINOR=$(echo $CURRENT | cut -d. -f2)
+          CURRENT_PATCH=$(echo $CURRENT | cut -d. -f3)
+
+          # If API major.minor changed, reset patch to 0, otherwise bump patch
+          if [ "$API_MAJOR" != "$CURRENT_MAJOR" ] || [ "$API_MINOR" != "$CURRENT_MINOR" ]; then
+            NEW_VERSION="${API_MAJOR}.${API_MINOR}.0"
+          else
+            NEW_PATCH=$((CURRENT_PATCH + 1))
+            NEW_VERSION="${API_MAJOR}.${API_MINOR}.${NEW_PATCH}"
+          fi
+
+          echo "Updating version: $CURRENT -> $NEW_VERSION"
+
+          # Update Cargo.toml version
+          sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
+
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Verify build
+        if: steps.git-check.outputs.has_changes == 'true'
+        run: cargo check
+
+      - name: Commit changes
+        if: steps.git-check.outputs.has_changes == 'true'
+        env:
+          API_SHA: ${{ github.event.client_payload.api_sha || 'manual' }}
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add src/types.rs Cargo.toml
+          git commit -m "chore: sync types from API ($API_SHA) - v${{ steps.version.outputs.new_version }}"
+
+      - name: Push changes
+        if: steps.git-check.outputs.has_changes == 'true'
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
