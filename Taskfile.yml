@@ -1,0 +1,144 @@
+version: '3'
+
+vars:
+  OPENAPI_SPEC_URL: '{{.OPENAPI_SPEC_URL | default "http://localhost:8080/openapi.json"}}'
+  OPENAPI_PROD_URL: https://api.refyne.uk/openapi.json
+
+tasks:
+  # ============================================
+  # Dependencies
+  # ============================================
+  deps:
+    desc: Fetch Rust dependencies
+    cmds:
+      - cargo fetch
+
+  deps:update:
+    desc: Update dependencies within compatible versions (safe)
+    cmds:
+      - cargo update --compatible
+
+  deps:upgrade:
+    desc: Upgrade dependencies to latest versions
+    cmds:
+      - cargo update
+
+  # ============================================
+  # Code generation
+  # ============================================
+  generate:
+    desc: Generate Rust types from OpenAPI spec (local server by default)
+    cmds:
+      - echo "Generating types from {{.OPENAPI_SPEC_URL}}..."
+      - python3 scripts/generate.py --url "{{.OPENAPI_SPEC_URL}}"
+      - echo "Done. Running cargo check..."
+      - cargo check
+
+  generate:prod:
+    desc: Generate types from production API
+    cmds:
+      - echo "Generating types from {{.OPENAPI_PROD_URL}}..."
+      - python3 scripts/generate.py --url "{{.OPENAPI_PROD_URL}}"
+      - echo "Done. Running cargo check..."
+      - cargo check
+
+  generate:file:
+    desc: Generate types from a local OpenAPI spec file (OPENAPI_SPEC_FILE=path)
+    cmds:
+      - echo "Generating types from {{.OPENAPI_SPEC_FILE}}..."
+      - python3 scripts/generate.py --file "{{.OPENAPI_SPEC_FILE}}"
+      - echo "Done. Running cargo check..."
+      - cargo check
+    requires:
+      vars: [OPENAPI_SPEC_FILE]
+
+  # ============================================
+  # Building
+  # ============================================
+  build:
+    desc: Build the crate
+    cmds:
+      - cargo build
+
+  build:release:
+    desc: Build the crate in release mode
+    cmds:
+      - cargo build --release
+
+  # ============================================
+  # Testing
+  # ============================================
+  test:
+    desc: Run tests
+    cmds:
+      - cargo test
+
+  test:verbose:
+    desc: Run tests with verbose output
+    cmds:
+      - cargo test -- --nocapture
+
+  # ============================================
+  # Linting & Formatting
+  # ============================================
+  lint:
+    desc: Run clippy lints
+    cmds:
+      - cargo clippy -- -D warnings
+
+  fmt:
+    desc: Format code
+    cmds:
+      - cargo fmt
+
+  fmt:check:
+    desc: Check code formatting
+    cmds:
+      - cargo fmt -- --check
+
+  # ============================================
+  # Documentation
+  # ============================================
+  doc:
+    desc: Generate documentation
+    cmds:
+      - cargo doc --no-deps
+
+  doc:open:
+    desc: Generate and open documentation
+    cmds:
+      - cargo doc --no-deps --open
+
+  # ============================================
+  # Combined tasks
+  # ============================================
+  check:
+    desc: Run cargo check
+    cmds:
+      - cargo check
+
+  all:
+    desc: Run all checks (fmt, lint, test, build)
+    cmds:
+      - task: fmt
+      - task: lint
+      - task: test
+      - task: build
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - cargo clean
+
+  # ============================================
+  # Publishing
+  # ============================================
+  publish:dry:
+    desc: Dry-run publish to crates.io
+    cmds:
+      - cargo publish --dry-run
+
+  publish:
+    desc: Publish to crates.io
+    cmds:
+      - cargo publish
