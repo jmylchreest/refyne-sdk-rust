@@ -265,18 +265,14 @@ def get_serde_attributes(name: str, schema: dict) -> list[str]:
     """Get serde derive attributes for a struct."""
     attrs = ["Debug", "Clone"]
 
-    # Request types need Serialize, response types need Deserialize
-    # Some types need both (for user customization)
-    if is_request_type(name):
-        attrs.append("Serialize")
-        # Only add Default if there are no required enum fields
-        if not has_required_enum_fields(schema):
-            attrs.append("Default")
-    elif is_response_type(name):
-        attrs.append("Deserialize")
-    else:
-        # Other types might need both
-        attrs.extend(["Serialize", "Deserialize"])
+    # All types need both Serialize and Deserialize because types can be nested
+    # within each other - a request type might be used as a field in another type
+    # that needs to be deserialized
+    attrs.extend(["Serialize", "Deserialize"])
+
+    # Add Default for request types without required enum fields
+    if is_request_type(name) and not has_required_enum_fields(schema):
+        attrs.append("Default")
 
     return attrs
 
