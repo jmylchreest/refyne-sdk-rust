@@ -4,12 +4,22 @@ use crate::cache::{create_cache_entry, generate_cache_key, hash_string, Cache, M
 use crate::error::{Error, Result};
 use crate::types::*;
 use crate::version::{build_user_agent, check_api_version_compatibility};
+use rand::Rng;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::warn;
+
+/// Calculate exponential backoff with jitter.
+fn calculate_backoff(attempt: u32) -> Duration {
+    // Exponential backoff: 2^(attempt-1) seconds, capped at 30s
+    let base_secs = 2u64.pow(attempt - 1).min(30);
+    // Add jitter: random value between 0% and 25% of the base
+    let jitter_ms = rand::rng().random_range(0..=(base_secs * 250));
+    Duration::from_millis(base_secs * 1000 + jitter_ms)
+}
 
 const DEFAULT_BASE_URL: &str = "https://api.refyne.uk";
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
@@ -473,7 +483,7 @@ impl Client {
                 }
                 // Retry on network errors
                 if attempt <= self.max_retries {
-                    let backoff = Duration::from_secs(2u64.pow(attempt - 1).min(30));
+                    let backoff = calculate_backoff(attempt);
                     warn!(
                         error = %e,
                         attempt = attempt,
@@ -510,7 +520,7 @@ impl Client {
 
         // Handle server errors
         if status.is_server_error() && attempt <= self.max_retries {
-            let backoff = Duration::from_secs(2u64.pow(attempt - 1).min(30));
+            let backoff = calculate_backoff(attempt);
             warn!(
                 status = %status,
                 attempt = attempt,

@@ -1,7 +1,8 @@
 //! Cache implementation that respects Cache-Control headers.
 
 use serde_json::Value;
-use std::collections::HashMap;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -111,19 +112,19 @@ pub fn generate_cache_key(method: &str, url: &str, auth_hash: Option<&str>) -> S
     key
 }
 
-/// Simple hash function for auth tokens.
+/// Hash a string using SHA-256 (truncated to 16 chars for cache keys).
 pub fn hash_string(s: &str) -> String {
-    let mut h: u32 = 0;
-    for c in s.chars() {
-        h = h.wrapping_shl(5).wrapping_sub(h).wrapping_add(c as u32);
-    }
-    format!("{:x}", h)
+    let mut hasher = Sha256::new();
+    hasher.update(s.as_bytes());
+    let result = hasher.finalize();
+    // Return first 16 hex chars (64 bits of entropy)
+    hex::encode(&result[..8])
 }
 
-/// In-memory cache implementation.
+/// In-memory cache implementation with O(1) eviction.
 pub struct MemoryCache {
     store: Arc<RwLock<HashMap<String, CacheEntry>>>,
-    order: Arc<RwLock<Vec<String>>>,
+    order: Arc<RwLock<VecDeque<String>>>,
     max_entries: usize,
 }
 
@@ -131,8 +132,8 @@ impl MemoryCache {
     /// Create a new memory cache with the given maximum entries.
     pub fn new(max_entries: usize) -> Self {
         Self {
-            store: Arc::new(RwLock::new(HashMap::new())),
-            order: Arc::new(RwLock::new(Vec::with_capacity(max_entries))),
+            store: Arc::new(RwLock::new(HashMap::with_capacity(max_entries))),
+            order: Arc::new(RwLock::new(VecDeque::with_capacity(max_entries))),
             max_entries,
         }
     }
@@ -186,15 +187,18 @@ impl Cache for MemoryCache {
         let mut store = self.store.write().unwrap();
         let mut order = self.order.write().unwrap();
 
-        // Evict oldest if at capacity
-        while store.len() >= self.max_entries && !order.is_empty() {
-            let oldest = order.remove(0);
-            store.remove(&oldest);
+        // Evict oldest if at capacity (O(1) with VecDeque)
+        while store.len() >= self.max_entries {
+            if let Some(oldest) = order.pop_front() {
+                store.remove(&oldest);
+            } else {
+                break;
+            }
         }
 
-        // Check if key exists
+        // Check if key exists - if so, it's already in order
         if !store.contains_key(key) {
-            order.push(key.to_string());
+            order.push_back(key.to_string());
         }
 
         store.insert(key.to_string(), entry);
@@ -205,6 +209,8 @@ impl Cache for MemoryCache {
         let mut order = self.order.write().unwrap();
 
         store.remove(key);
+        // Note: This is still O(n), but delete is infrequent
+        // For true O(1) delete, we'd need a linked hash map
         order.retain(|k| k != key);
     }
 }
