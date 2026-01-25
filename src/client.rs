@@ -191,6 +191,11 @@ impl Client {
         LlmClient { client: self }
     }
 
+    /// Access webhook operations.
+    pub fn webhooks(&self) -> WebhooksClient<'_> {
+        WebhooksClient { client: self }
+    }
+
     /// Extract structured data from a single web page.
     pub async fn extract(&self, request: ExtractRequest) -> Result<ExtractResponse> {
         self.post("/api/v1/extract", &request).await
@@ -243,6 +248,29 @@ impl Client {
             format!("/api/v1/jobs/{}/results", id)
         };
         self.get_skip_cache(&path).await
+    }
+
+    /// Get a presigned download URL for job results.
+    pub async fn download_job(&self, id: &str) -> Result<GetJobResultsDownloadOutputBody> {
+        self.get(&format!("/api/v1/jobs/{}/download", id)).await
+    }
+
+    /// Get the crawl map for a job.
+    pub async fn get_job_crawl_map(&self, id: &str) -> Result<GetCrawlMapOutputBody> {
+        self.get(&format!("/api/v1/jobs/{}/crawl-map", id)).await
+    }
+
+    /// Get debug capture data for a job.
+    pub async fn get_job_debug_capture(&self, id: &str) -> Result<GetJobDebugCaptureOutputBody> {
+        self.get(&format!("/api/v1/jobs/{}/debug-capture", id)).await
+    }
+
+    /// Get webhook deliveries for a job.
+    pub async fn get_job_webhook_deliveries(
+        &self,
+        id: &str,
+    ) -> Result<GetJobWebhookDeliveriesOutputBody> {
+        self.get(&format!("/api/v1/jobs/{}/webhooks", id)).await
     }
 
     // === Schemas ===
@@ -353,6 +381,72 @@ impl Client {
     /// List available models for a provider.
     pub async fn list_models(&self, provider: &str) -> Result<ModelList> {
         self.get(&format!("/api/v1/llm/models/{}", provider)).await
+    }
+
+    // === Webhooks ===
+
+    /// List all webhooks.
+    pub async fn list_webhooks(&self) -> Result<ListWebhooksOutputBody> {
+        self.get("/api/v1/webhooks").await
+    }
+
+    /// Get a webhook by ID.
+    pub async fn get_webhook(&self, id: &str) -> Result<WebhookResponse> {
+        self.get(&format!("/api/v1/webhooks/{}", id)).await
+    }
+
+    /// Create a new webhook.
+    pub async fn create_webhook(&self, input: WebhookInput) -> Result<WebhookResponse> {
+        self.post("/api/v1/webhooks", &input).await
+    }
+
+    /// Update a webhook.
+    pub async fn update_webhook(&self, id: &str, input: WebhookInput) -> Result<WebhookResponse> {
+        self.put(&format!("/api/v1/webhooks/{}", id), &input).await
+    }
+
+    /// Delete a webhook.
+    pub async fn delete_webhook(&self, id: &str) -> Result<()> {
+        self.delete(&format!("/api/v1/webhooks/{}", id)).await
+    }
+
+    /// List webhook deliveries.
+    pub async fn list_webhook_deliveries(
+        &self,
+        id: &str,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<ListWebhookDeliveriesOutputBody> {
+        let mut path = format!("/api/v1/webhooks/{}/deliveries", id);
+        let mut params = vec![];
+        if let Some(l) = limit {
+            params.push(format!("limit={}", l));
+        }
+        if let Some(o) = offset {
+            params.push(format!("offset={}", o));
+        }
+        if !params.is_empty() {
+            path.push('?');
+            path.push_str(&params.join("&"));
+        }
+        self.get(&path).await
+    }
+
+    // === Utility ===
+
+    /// Get API health status.
+    pub async fn health(&self) -> Result<HealthCheckOutputBody> {
+        self.get("/health").await
+    }
+
+    /// List available content cleaners.
+    pub async fn list_cleaners(&self) -> Result<ListCleanersOutputBody> {
+        self.get("/api/v1/cleaners").await
+    }
+
+    /// Get pricing tiers and limits.
+    pub async fn get_pricing_tiers(&self) -> Result<ListTierLimitsOutputBody> {
+        self.get("/api/v1/pricing/tiers").await
     }
 
     // === Internal methods ===
@@ -560,6 +654,29 @@ impl<'a> JobsClient<'a> {
     pub async fn get_results(&self, id: &str, merge: bool) -> Result<JobResults> {
         self.client.get_job_results(id, merge).await
     }
+
+    /// Get a presigned download URL for job results.
+    pub async fn download(&self, id: &str) -> Result<GetJobResultsDownloadOutputBody> {
+        self.client.download_job(id).await
+    }
+
+    /// Get the crawl map for a job.
+    pub async fn get_crawl_map(&self, id: &str) -> Result<GetCrawlMapOutputBody> {
+        self.client.get_job_crawl_map(id).await
+    }
+
+    /// Get debug capture data for a job.
+    pub async fn get_debug_capture(&self, id: &str) -> Result<GetJobDebugCaptureOutputBody> {
+        self.client.get_job_debug_capture(id).await
+    }
+
+    /// Get webhook deliveries for a job.
+    pub async fn get_webhook_deliveries(
+        &self,
+        id: &str,
+    ) -> Result<GetJobWebhookDeliveriesOutputBody> {
+        self.client.get_job_webhook_deliveries(id).await
+    }
 }
 
 /// Sub-client for schema operations.
@@ -690,6 +807,48 @@ impl<'a> LlmClient<'a> {
     }
 }
 
+/// Sub-client for webhook operations.
+pub struct WebhooksClient<'a> {
+    client: &'a Client,
+}
+
+impl<'a> WebhooksClient<'a> {
+    /// List all webhooks.
+    pub async fn list(&self) -> Result<ListWebhooksOutputBody> {
+        self.client.list_webhooks().await
+    }
+
+    /// Get a webhook by ID.
+    pub async fn get(&self, id: &str) -> Result<WebhookResponse> {
+        self.client.get_webhook(id).await
+    }
+
+    /// Create a new webhook.
+    pub async fn create(&self, input: WebhookInput) -> Result<WebhookResponse> {
+        self.client.create_webhook(input).await
+    }
+
+    /// Update a webhook.
+    pub async fn update(&self, id: &str, input: WebhookInput) -> Result<WebhookResponse> {
+        self.client.update_webhook(id, input).await
+    }
+
+    /// Delete a webhook.
+    pub async fn delete(&self, id: &str) -> Result<()> {
+        self.client.delete_webhook(id).await
+    }
+
+    /// List webhook deliveries.
+    pub async fn list_deliveries(
+        &self,
+        id: &str,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<ListWebhookDeliveriesOutputBody> {
+        self.client.list_webhook_deliveries(id, limit, offset).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -780,6 +939,7 @@ mod tests {
         let _ = client.sites();
         let _ = client.keys();
         let _ = client.llm();
+        let _ = client.webhooks();
     }
 
     #[test]

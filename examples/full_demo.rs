@@ -139,8 +139,7 @@ async fn main() -> Result<(), refyne::Error> {
     let suggested_schema = match client
         .analyze(AnalyzeRequest {
             url: TEST_URL.into(),
-            depth: None,
-            fetch_mode: None,
+            ..Default::default()
         })
         .await
     {
@@ -260,10 +259,7 @@ async fn main() -> Result<(), refyne::Error> {
                 same_domain_only: None,
                 use_sitemap: None,
             }),
-            llm_config: None,
-            webhook: None,
-            webhook_id: None,
-            webhook_url: None,
+            ..Default::default()
         })
         .await
     {
