@@ -927,6 +927,8 @@ pub struct CrawlJobResponseBody {
     pub job_id: String,
     /// Number of pages successfully extracted (sync mode)
     pub page_count: Option<i64>,
+    /// Position in queue (1-indexed, only for pending jobs)
+    pub queue_position: Option<i64>,
     /// Job status: pending, running, completed, failed
     #[serde(rename = "status")]
     pub status: String,
@@ -1260,6 +1262,7 @@ pub struct JobResponse {
     #[serde(rename = "id")]
     pub id: String,
     pub page_count: i64,
+    pub queue_position: i64,
     pub started_at: Option<String>,
     #[serde(rename = "status")]
     pub status: String,
